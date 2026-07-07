@@ -1,21 +1,16 @@
-## Build
-FROM beevelop/ionic AS ionic
-# Create app directory
+## Build — Angular 7 / Ionic 4 (2019) : node-sass 4.12 + webpack 4 -> nécessite Node 12.
+## Les images ionic récentes (Node 22) cassent (OpenSSL 3, node-sass sans binaire natif).
+## On builde via `ng build` (npm run build, @angular/cli local) : pas besoin du CLI ionic
+## global, dont les versions récentes exigent Node >=16. Sortie dans ./www (cf. angular.json).
+FROM node:12 AS ionic
 WORKDIR /usr/src/app
-# Install app dependencies
-# A wildcard is used to ensure both package.json AND package-lock.json are copied
-# where available (npm@5+)
+# Copie package.json + package-lock.json pour installer les deps (cache Docker).
 COPY package*.json ./
 RUN npm ci
-# Bundle app source
+# Code source puis build de production dans ./www.
 COPY . .
-# beevelop/ionic:latest embarque désormais Node >=17 (OpenSSL 3) alors que ce projet
-# utilise webpack 4 (hash MD4) -> ERR_OSSL_EVP_UNSUPPORTED. On réactive le provider legacy.
-ENV NODE_OPTIONS=--openssl-legacy-provider
-RUN ionic build
+RUN npm run build
 
-## Run 
+## Run — sert le SPA compilé avec nginx.
 FROM nginx:alpine
-#COPY www /usr/share/nginx/html
-COPY --from=ionic  /usr/src/app/www /usr/share/nginx/html
-
+COPY --from=ionic /usr/src/app/www /usr/share/nginx/html
