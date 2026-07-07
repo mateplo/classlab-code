@@ -9,6 +9,9 @@ COPY package*.json ./
 RUN npm ci
 # Bundle app source
 COPY . .
+# beevelop/ionic:latest embarque désormais Node >=17 (OpenSSL 3) alors que ce projet
+# utilise webpack 4 (hash MD4) -> ERR_OSSL_EVP_UNSUPPORTED. On réactive le provider legacy.
+ENV NODE_OPTIONS=--openssl-legacy-provider
 RUN ionic build
 
 ## Run 

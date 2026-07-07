@@ -1,13 +1,15 @@
-# Build + push des images Udagram vers GHCR. Le reverseproxy n'est PAS buildé
-# (nginx stock + conf en ConfigMap côté classlab-k8s).
-# Tags : sha-court (toujours), `latest` (sur la branche par défaut, suivi par dev/staging),
-# sémver `X.Y.Z` (sur tag git `vX.Y.Z`, suivi par prod). Argo CD Image Updater lit ces tags.
+# Build + push des images Udagram vers GHCR, SÉPARÉ PAR BRANCHE.
+# Chaque push produit 2 tags : `<branche>-<sha>` (immuable, ce qu'Image Updater épingle)
+# et `<branche>` (mutable, tag de bootstrap des overlays).
+#   dev     -> udagram-*:dev-<sha>      -> env dev
+#   staging -> udagram-*:staging-<sha>  -> env staging
+#   master  -> udagram-*:master-<sha>   -> env prod
+# Le reverseproxy n'est pas buildé (nginx stock + conf en ConfigMap côté classlab-k8s).
 name: build-and-push
 
 on:
   push:
-    branches: [master, main]
-    tags: ["v*"]
+    branches: [master, main, dev, staging]
 
 permissions:
   contents: read
@@ -19,14 +21,10 @@ jobs:
     strategy:
       matrix:
         include:
-          - image: udagram-frontend
-            context: ./frontend
-          - image: udagram-restapi-user
-            context: ./backend/restapi-user
-          - image: udagram-restapi-feed
-            context: ./backend/restapi-feed
-          - image: udagram-restapi-image-filter
-            context: ./backend/restapi-image-filter
+          - { image: udagram-frontend, context: ./frontend }
+          - { image: udagram-restapi-user, context: ./backend/restapi-user }
+          - { image: udagram-restapi-feed, context: ./backend/restapi-feed }
+          - { image: udagram-restapi-image-filter, context: ./backend/restapi-image-filter }
     steps:
       - uses: actions/checkout@v4
 
@@ -39,20 +37,17 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Tags & labels
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ghcr.io/${{ github.repository_owner }}/${{ matrix.image }}
-          tags: |
-            type=sha,format=short
-            type=raw,value=latest,enable={{is_default_branch}}
-            type=semver,pattern={{version}}
+      - name: SHA court
+        run: echo "SHORT_SHA=${GITHUB_SHA::7}" >> "$GITHUB_ENV"
 
       - name: Build & push
         uses: docker/build-push-action@v6
         with:
           context: ${{ matrix.context }}
           push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+          # 2 tags par image. github.ref_name = la branche poussée (dev / staging / master).
+          #   <branche>-<sha7>  = tag unique (traçable)
+          #   <branche>         = tag mobile "dernière de la branche"
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/${{ matrix.image }}:${{ github.ref_name }}-${{ env.SHORT_SHA }}
+            ghcr.io/${{ github.repository_owner }}/${{ matrix.image }}:${{ github.ref_name }}
