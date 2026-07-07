@@ -7,6 +7,16 @@ import bodyParser from 'body-parser';
 
 import { V0MODELS } from './controllers/v0/model.index';
 import { config } from './config/config';
+import client from 'prom-client';
+
+// Métriques Prometheus (niveau process), partagées par toutes les requêtes.
+client.collectDefaultMetrics();
+const httpDuration = new client.Histogram({
+  name: 'http_request_duration_seconds',
+  help: 'Durée des requêtes HTTP par méthode/route/statut',
+  labelNames: ['method', 'route', 'status'],
+  buckets: [0.05, 0.1, 0.3, 0.5, 1, 2, 5],
+});
 
 (async () => {
   await sequelize.addModels(V0MODELS);
@@ -14,6 +24,20 @@ import { config } from './config/config';
 
   const app = express();
   const port = process.env.PORT || 8080; // default port to listen
+
+  // Chronomètre chaque requête + expose /metrics (scrapé par Prometheus, hors /api/v0).
+  app.use((req, res, next) => {
+    const done = httpDuration.startTimer();
+    res.on('finish', () => {
+      const route = req.path.replace(/\/[0-9]+/g, '/:id');
+      done({ method: req.method, route, status: String(res.statusCode) });
+    });
+    next();
+  });
+  app.get('/metrics', async (_req, res) => {
+    res.set('Content-Type', client.register.contentType);
+    res.end(await client.register.metrics());
+  });
   
   app.use(bodyParser.json());
 

@@ -5,7 +5,7 @@ WORKDIR /usr/src/app
 # Copy package.json AND package-lock.json
 COPY package*.json ./
 # Install all dependencies
-RUN npm ci 
+RUN npm install 
 # Copy the rest of the code
 COPY . .
 # Expose the port 
