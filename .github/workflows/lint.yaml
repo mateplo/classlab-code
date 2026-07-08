@@ -49,7 +49,10 @@ jobs:
           node-version: "12"
       - name: Install deps
         working-directory: ${{ matrix.service }}
-        run: npm ci || npm install
+        # --ignore-scripts : saute les compilations natives (bcrypt/node-sass) qui cassent
+        # sur le Python 3.11+ du runner via un vieux node-gyp. Le lint n'a besoin que des
+        # sources TS + tslint. `npm install` (pas `ci`) car le lock n'inclut pas prom-client.
+        run: npm install --ignore-scripts
       - name: Lint
         working-directory: ${{ matrix.service }}
         # frontend -> `npm run lint` ; backends -> tslint. On tente le script s'il existe,
