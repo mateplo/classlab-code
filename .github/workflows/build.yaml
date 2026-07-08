@@ -10,8 +10,6 @@ name: build-and-push
 on:
   push:
     branches: [master, main, dev, staging]
-  pull_request:
-    branches: [master, main, dev, staging]
 
 permissions:
   contents: read
