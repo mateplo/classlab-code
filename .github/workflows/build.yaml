@@ -10,6 +10,8 @@ name: build-and-push
 on:
   push:
     branches: [master, main, dev, staging]
+  pull_request:
+    branches: [master, main, dev, staging]
 
 permissions:
   contents: read
@@ -51,3 +53,57 @@ jobs:
           tags: |
             ghcr.io/${{ github.repository_owner }}/${{ matrix.image }}:${{ github.ref_name }}-${{ env.SHORT_SHA }}
             ghcr.io/${{ github.repository_owner }}/${{ matrix.image }}:${{ github.ref_name }}
+
+  # Ménage post-build : après le push, on ne garde que les 3 dernières images de l'env
+  # qui vient d'être poussé (github.ref_name). Pas de cron -> la purge suit les builds.
+  # Le tag mutable <branche> (sans tiret) ne matche pas "<branche>-*" -> protégé.
+  cleanup:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: snok/container-retention-policy@v3.0.0
+        with:
+          # Compte PERSO -> littéralement "user" (endpoint /user/packages), pas "mateplo".
+          # Pour une org, on mettrait le nom de l'org à la place.
+          account: user
+          # snok exige un PAT CLASSIQUE (ghp_) avec delete:packages : le GITHUB_TOKEN
+          # (ghs_) est refusé pour supprimer des packages. -> secret GHCR_CLEANUP_TOKEN.
+          token: ${{ secrets.GHCR_CLEANUP_TOKEN }}
+          image-names: "udagram-frontend udagram-restapi-user udagram-restapi-feed udagram-restapi-image-filter"
+          image-tags: "${{ github.ref_name }}-*"
+          # Ne supprime QUE des versions taggées : ne touche jamais aux sous-manifestes
+          # non taggés (attestations, arch) qu'un index référence
+          tag-selection: tagged
+          keep-n-most-recent: 3
+          # cut-off OBLIGATOIRE en v3 (âge min pour être supprimable). Petit -> keep-n=3
+          # pilote. Les 3 plus récentes sont TOUJOURS gardées (dont l'image déployée).
+          cut-off: 1h
+          dry-run: false
+
+  # Scan sécurité de l'IMAGE fraîchement buildée (needs: build) : couche OS + app.
+  # fail-fast: false -> un service KO ne bloque pas le scan des autres.
+  trivy-image:
+    needs: build
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        image:
+          - udagram-frontend
+          - udagram-restapi-user
+          - udagram-restapi-feed
+          - udagram-restapi-image-filter
+    steps:
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: image
+          image-ref: ghcr.io/${{ github.repository_owner }}/${{ matrix.image }}:${{ github.ref_name }}
+          severity: HIGH,CRITICAL
+          format: table
+          exit-code: "0"   # report-only ; passe à "1" pour bloquer sur CVE

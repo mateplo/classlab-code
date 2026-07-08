@@ -1,0 +1,62 @@
+# Lint. Uniquement sur PR : le trigger pull_request teste déjà le code du MERGE
+# (PR + base), donc relinter après le push serait redondant (le résultat du lint ne
+# dépend que du code). Le gate se fait ici, avant merge.
+name: lint
+
+on:
+  pull_request:
+    branches: [master, main, dev, staging]
+    
+permissions:
+  contents: read
+
+jobs:
+  # --- Lint des Dockerfiles ---
+  hadolint:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        dockerfile:
+          - frontend/Dockerfile
+          - backend/restapi-user/Dockerfile
+          - backend/restapi-feed/Dockerfile
+          - backend/restapi-image-filter/Dockerfile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: ${{ matrix.dockerfile }}
+
+  # --- Lint TypeScript (tslint, déjà présent dans le projet) ---
+  # NB : le frontend a le script `npm run lint` (ng lint) ; les backends utilisent tslint
+  # directement. À AJUSTER selon la config réelle de chaque service (présence de
+  # tslint.json / tsconfig.json). Node 12 car les vieilles deps ne s'installent qu'en 12.
+  tslint:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        service:
+          - frontend
+          - backend/restapi-user
+          - backend/restapi-feed
+          - backend/restapi-image-filter
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "12"
+      - name: Install deps
+        working-directory: ${{ matrix.service }}
+        run: npm ci || npm install
+      - name: Lint
+        working-directory: ${{ matrix.service }}
+        # frontend -> `npm run lint` ; backends -> tslint. On tente le script s'il existe,
+        # sinon tslint sur src/.
+        run: |
+          if npm run | grep -q " lint"; then
+            npm run lint
+          else
+            npx tslint -p tsconfig.json 'src/**/*.ts'
+          fi
