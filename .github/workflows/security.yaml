@@ -4,6 +4,7 @@ name: security
 
 on:
   pull_request:
+    branches: [master, main, dev, staging]
   push:
     branches: [master, main, dev, staging]
   schedule:
@@ -41,35 +42,8 @@ jobs:
           # Passe à "1" quand tu veux FAIRE ÉCHOUER la PR sur des vulnérabilités.
           exit-code: "0"
 
-  # --- Scan des IMAGES buildées (couche OS du base image + app) ---
-  # Seulement push/schedule : l'image existe alors sur GHCR. Sur PR, l'image de la PR
-  # n'est pas encore poussée -> le scan `fs` (deps) ci-dessus suffit avant merge.
-  # github.ref_name = la branche (push) ou la branche par défaut (schedule) -> bon tag.
-  trivy-image:
-    if: github.event_name != 'pull_request'
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        image:
-          - udagram-frontend
-          - udagram-restapi-user
-          - udagram-restapi-feed
-          - udagram-restapi-image-filter
-    steps:
-      - name: Login to GHCR
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-      - uses: aquasecurity/trivy-action@v0.36.0
-        with:
-          scan-type: image
-          image-ref: ghcr.io/${{ github.repository_owner }}/${{ matrix.image }}:${{ github.ref_name }}
-          severity: HIGH,CRITICAL
-          format: table
-          exit-code: "0"   # report-only ; passe à "1" pour bloquer sur CVE
+  # NB : le scan des IMAGES est dans build.yaml (job `trivy-image`, needs: build) : il doit
+  # tourner APRÈS le build, et `needs:` ne traverse pas les fichiers workflow.
 
   # --- Détection de secrets committés ---
   gitleaks:
@@ -81,3 +55,33 @@ jobs:
       - uses: gitleaks/gitleaks-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # --- Re-scan HEBDO des images en registre (nouvelles CVE sur images inchangées) ---
+  # Ne tourne QU'AU SCHEDULE (lundi 4h). Le scan post-build (frais) est dans build.yaml.
+  # Matrice image x env : re-scanne les images déployées des 3 environnements.
+  trivy-image-scheduled:
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        image:
+          - udagram-frontend
+          - udagram-restapi-user
+          - udagram-restapi-feed
+          - udagram-restapi-image-filter
+        tag: [dev, staging, master]
+    steps:
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: image
+          image-ref: ghcr.io/${{ github.repository_owner }}/${{ matrix.image }}:${{ matrix.tag }}
+          severity: HIGH,CRITICAL
+          format: table
+          exit-code: "0"   # report-only ; passe à "1" pour bloquer sur CVE

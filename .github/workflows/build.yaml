@@ -10,6 +10,8 @@ name: build-and-push
 on:
   push:
     branches: [master, main, dev, staging]
+  pull_request:
+    branches: [master, main, dev, staging]
 
 permissions:
   contents: read
@@ -77,3 +79,31 @@ jobs:
           # pilote. Les 3 plus récentes sont TOUJOURS gardées (dont l'image déployée).
           cut-off: 1h
           dry-run: false
+
+  # Scan sécurité de l'IMAGE fraîchement buildée (needs: build) : couche OS + app.
+  # fail-fast: false -> un service KO ne bloque pas le scan des autres.
+  trivy-image:
+    needs: build
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        image:
+          - udagram-frontend
+          - udagram-restapi-user
+          - udagram-restapi-feed
+          - udagram-restapi-image-filter
+    steps:
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: image
+          image-ref: ghcr.io/${{ github.repository_owner }}/${{ matrix.image }}:${{ github.ref_name }}
+          severity: HIGH,CRITICAL
+          format: table
+          exit-code: "0"   # report-only ; passe à "1" pour bloquer sur CVE
