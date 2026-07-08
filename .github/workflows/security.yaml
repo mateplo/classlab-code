@@ -14,9 +14,6 @@ permissions:
 
 jobs:
   # --- SAST : analyse statique du code JS/TS ---
-  # ⚠️ CodeQL/code-scanning est GRATUIT sur repo PUBLIC. Sur repo PRIVÉ il faut
-  # GitHub Advanced Security (payant, souvent org-only). Si ton repo est privé et
-  # que ça échoue à l'upload -> retire ce job et garde Trivy + gitleaks.
   codeql:
     runs-on: ubuntu-latest
     permissions:
@@ -34,7 +31,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: aquasecurity/trivy-action@0.24.0
+      - uses: aquasecurity/trivy-action@v0.36.0
         with:
           scan-type: fs
           scan-ref: .
@@ -43,6 +40,36 @@ jobs:
           # report-only au départ : ce projet (Node 12, vieilles deps) a beaucoup de CVE.
           # Passe à "1" quand tu veux FAIRE ÉCHOUER la PR sur des vulnérabilités.
           exit-code: "0"
+
+  # --- Scan des IMAGES buildées (couche OS du base image + app) ---
+  # Seulement push/schedule : l'image existe alors sur GHCR. Sur PR, l'image de la PR
+  # n'est pas encore poussée -> le scan `fs` (deps) ci-dessus suffit avant merge.
+  # github.ref_name = la branche (push) ou la branche par défaut (schedule) -> bon tag.
+  trivy-image:
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        image:
+          - udagram-frontend
+          - udagram-restapi-user
+          - udagram-restapi-feed
+          - udagram-restapi-image-filter
+    steps:
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: image
+          image-ref: ghcr.io/${{ github.repository_owner }}/${{ matrix.image }}:${{ github.ref_name }}
+          severity: HIGH,CRITICAL
+          format: table
+          exit-code: "0"   # report-only ; passe à "1" pour bloquer sur CVE
 
   # --- Détection de secrets committés ---
   gitleaks:

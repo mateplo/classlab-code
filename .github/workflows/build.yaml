@@ -62,7 +62,9 @@ jobs:
       - uses: snok/container-retention-policy@v3.0.0
         with:
           account: mateplo
-          token: ${{ secrets.GITHUB_TOKEN }}
+          # snok exige un PAT CLASSIQUE (ghp_) avec delete:packages : le GITHUB_TOKEN
+          # (ghs_) est refusé pour supprimer des packages. -> secret GHCR_CLEANUP_TOKEN.
+          token: ${{ secrets.GHCR_CLEANUP_TOKEN }}
           image-names: "udagram-frontend udagram-restapi-user udagram-restapi-feed udagram-restapi-image-filter"
           image-tags: "${{ github.ref_name }}-*"
           keep-n-most-recent: 3
