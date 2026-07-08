@@ -1,0 +1,56 @@
+# Scans de sécurité. Déclenché sur PR (gate avant merge), push (trace sur les branches
+# d'env) et schedule (re-scan périodique : attrape les nouvelles CVE sur du code inchangé).
+name: security
+
+on:
+  pull_request:
+  push:
+    branches: [master, main, dev, staging]
+  schedule:
+    - cron: "0 4 * * 1"   # lundis 04:00 UTC
+
+permissions:
+  contents: read
+
+jobs:
+  # --- SAST : analyse statique du code JS/TS ---
+  # ⚠️ CodeQL/code-scanning est GRATUIT sur repo PUBLIC. Sur repo PRIVÉ il faut
+  # GitHub Advanced Security (payant, souvent org-only). Si ton repo est privé et
+  # que ça échoue à l'upload -> retire ce job et garde Trivy + gitleaks.
+  codeql:
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: github/codeql-action/init@v3
+        with:
+          languages: javascript-typescript
+      - uses: github/codeql-action/analyze@v3
+
+  # --- Scan des dépendances + mauvaises configs (lit les package-lock.json + Dockerfiles) ---
+  trivy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: aquasecurity/trivy-action@0.24.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          severity: HIGH,CRITICAL
+          format: table
+          # report-only au départ : ce projet (Node 12, vieilles deps) a beaucoup de CVE.
+          # Passe à "1" quand tu veux FAIRE ÉCHOUER la PR sur des vulnérabilités.
+          exit-code: "0"
+
+  # --- Détection de secrets committés ---
+  gitleaks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # historique complet pour scanner tous les commits
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

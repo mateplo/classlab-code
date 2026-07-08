@@ -51,3 +51,19 @@ jobs:
           tags: |
             ghcr.io/${{ github.repository_owner }}/${{ matrix.image }}:${{ github.ref_name }}-${{ env.SHORT_SHA }}
             ghcr.io/${{ github.repository_owner }}/${{ matrix.image }}:${{ github.ref_name }}
+
+  # Ménage post-build : après le push, on ne garde que les 3 dernières images de l'env
+  # qui vient d'être poussé (github.ref_name). Pas de cron -> la purge suit les builds.
+  # Le tag mutable <branche> (sans tiret) ne matche pas "<branche>-*" -> protégé.
+  cleanup:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: snok/container-retention-policy@v3.0.0
+        with:
+          account: mateplo
+          token: ${{ secrets.GITHUB_TOKEN }}
+          image-names: "udagram-frontend udagram-restapi-user udagram-restapi-feed udagram-restapi-image-filter"
+          image-tags: "${{ github.ref_name }}-*"
+          keep-n-most-recent: 3
+          dry-run: true   # <-- passe à false après vérification
