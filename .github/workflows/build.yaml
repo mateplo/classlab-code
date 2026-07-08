@@ -61,7 +61,9 @@ jobs:
     steps:
       - uses: snok/container-retention-policy@v3.0.0
         with:
-          account: mateplo
+          # Compte PERSO -> littéralement "user" (endpoint /user/packages), pas "mateplo".
+          # Pour une org, on mettrait le nom de l'org à la place.
+          account: user
           # snok exige un PAT CLASSIQUE (ghp_) avec delete:packages : le GITHUB_TOKEN
           # (ghs_) est refusé pour supprimer des packages. -> secret GHCR_CLEANUP_TOKEN.
           token: ${{ secrets.GHCR_CLEANUP_TOKEN }}
