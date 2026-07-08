@@ -73,4 +73,4 @@ jobs:
           # cut-off OBLIGATOIRE en v3 (âge min pour être supprimable). Petit -> keep-n=3
           # pilote. Les 3 plus récentes sont TOUJOURS gardées (dont l'image déployée).
           cut-off: 1h
-          dry-run: true   # <-- passe à false après vérification
+          dry-run: false
