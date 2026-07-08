@@ -69,6 +69,9 @@ jobs:
           token: ${{ secrets.GHCR_CLEANUP_TOKEN }}
           image-names: "udagram-frontend udagram-restapi-user udagram-restapi-feed udagram-restapi-image-filter"
           image-tags: "${{ github.ref_name }}-*"
+          # Ne supprime QUE des versions taggées : ne touche jamais aux sous-manifestes
+          # non taggés (attestations, arch) qu'un index référence
+          tag-selection: tagged
           keep-n-most-recent: 3
           # cut-off OBLIGATOIRE en v3 (âge min pour être supprimable). Petit -> keep-n=3
           # pilote. Les 3 plus récentes sont TOUJOURS gardées (dont l'image déployée).
