@@ -1,29 +1,42 @@
-## Udagram Simple Cloud based Web App  [![Build Status](https://travis-ci.com/pravinyo/udagram-app.svg?branch=master)](https://travis-ci.com/pravinyo/udagram-app)
-Developed as a part of Cloud Developer Nanodegree  with Udacity.
+# classlab-code
 
-Key Components:
-- [Frontend Component](frontend/README.md):
- `Built using Typescript, Nodejs and Ionic, Cloudfront, docker-container`
- 
- - [Backend REST API for User Service](backend/restapi-user/README.md):
- `Built using Nodejs, Typescript, docker-container, AWS Postgress, sequalize`
- 
- - [Backend REST API for Feed Service](backend/restapi-feed/README.md):
- `Built using Nodejs, Typescript, docker-container, AWS Postgress,S3 Buckert for media, sequalize`
+Code source de l'application **Udagram** (Node.js / TypeScript), utilisée comme app métier
+de référence de la plateforme. Le déploiement vit dans `classlab-k8s` ; ici on a le code, les
+Dockerfiles et les workflows qui buildent les images.
 
- - [Backend REST API for Image Filter Service](backend/restapi-image-filter/README.md):
- `Built using Nodejs, Typescript, docker-container, S3 Buckert for media`
- 
- - Deployment Component:
-    - [`It dockerizes the component and host on docker hub`](deployment/docker/README.md)
-    - [`Kubernetes pull the images from registry and host the container application as pod on clustor in AWS`](deployment/kubernetes/README.md)
- 
- ## CI/CD:
- - We are using Travis CI and CD for build and deployment on docker hub.
- - When new change is been made and ready to submit. PR is required to be raised.
- - PR will go to CI/CD Pipeline.
- - Deployemnt is available only in dev and master branch.
- 
-## Additional Details:
-- Docker Hub: https://hub.docker.com/repository/docker/pravinyo/
-- Travis : https://travis-ci.com/github/pravinyo/udagram-app
+Dérivé du projet Udagram (Udacity Cloud Developer Nanodegree), réadapté pour tourner en
+GitOps sur k3s au lieu d'AWS/Travis.
+
+## Composants
+
+- `frontend` — SPA Angular/Ionic servie par nginx.
+- `backend/restapi-user` — service utilisateurs (auth JWT, Postgres).
+- `backend/restapi-feed` — service de flux (Postgres, médias S3).
+- `backend/restapi-image-filter` — traitement d'images (médias S3).
+
+Chaque backend expose `/metrics` (prom-client). Le reverseproxy et Postgres sont fournis
+côté `classlab-k8s`, pas ici.
+
+> Base Node 12 (dépendances anciennes). Les installs utilisent `--ignore-scripts` pour éviter
+> les compilations natives (bcrypt/node-sass) qui cassent sur les runners récents.
+
+## Développement
+
+Par service (dans son dossier) :
+
+```bash
+npm install --ignore-scripts
+npm run lint          # frontend
+npx tslint -p tsconfig.json 'src/**/*.ts'   # backends
+```
+
+## CI/CD
+
+Workflows dans `.github/workflows/` (`lint`, `build`, `security`). Sur push, chaque service
+est buildé et poussé sur GHCR (`ghcr.io/mateplo/udagram-*`) en deux tags `<branche>` et
+`<branche>-<sha>`. Argo CD Image Updater propage ensuite le tag dans `classlab-k8s`.
+
+Envs : `dev` → dev, `staging` → staging, `master`/`main` → prod.
+
+Comme pour toute app du workspace : rendre les packages GHCR **publics** (pas d'imagePullSecret),
+et fournir le secret Actions `GHCR_CLEANUP_TOKEN` (PAT `delete:packages`) dans ce repo.
