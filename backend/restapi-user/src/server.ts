@@ -20,7 +20,29 @@ const httpDuration = new client.Histogram({
 
 (async () => {
   await sequelize.addModels(V0MODELS);
-  await sequelize.sync();
+
+  // Attente active de la base au démarrage : le DNS du service Postgres ou la base
+  // elle-même peuvent ne pas être prêts quand le pod boote (getaddrinfo EAI_AGAIN,
+  // ECONNREFUSED). Sans ce retry, sync() rejette une seule fois, l'IIFE async rejette,
+  // et app.listen() n'est jamais atteint : le process reste vivant mais n'écoute pas
+  // (port fermé -> 502 renvoyé par le reverseproxy). En dernier recours process.exit(1)
+  // laisse Kubernetes redémarrer le pod.
+  const maxRetries = 30;
+  for (let attempt = 1; ; attempt++) {
+    try {
+      await sequelize.sync();
+      break;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      if (attempt >= maxRetries) {
+        console.error(`Base indisponible après ${attempt} tentatives, arrêt du process.`, message);
+        process.exit(1);
+      }
+      const delay = Math.min(1000 * attempt, 10000);
+      console.warn(`Connexion à la base échouée (tentative ${attempt}/${maxRetries}) : ${message}. Nouvel essai dans ${delay}ms.`);
+      await new Promise((resolve) => setTimeout(resolve, delay));
+    }
+  }
 
   const app = express();
   const port = process.env.PORT || 8080; // default port to listen
