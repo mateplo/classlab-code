@@ -13,4 +13,6 @@ RUN npm run build
 
 ## Run — sert le SPA compilé avec nginx.
 FROM nginx:alpine
+# Conf avec fallback SPA (try_files -> /index.html) : sinon /home, /upload… en 404 direct.
+COPY default.conf /etc/nginx/conf.d/default.conf
 COPY --from=ionic /usr/src/app/www /usr/share/nginx/html
