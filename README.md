@@ -25,7 +25,7 @@ côté `classlab-k8s`, pas ici.
 Par service (dans son dossier) :
 
 ```bash
-npm install --ignore-scripts
+npm install --ignore-scriptsfegfefe
 npm run lint          # frontend
 npx tslint -p tsconfig.json 'src/**/*.ts'   # backends
 ```
